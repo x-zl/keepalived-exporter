@@ -10,21 +10,32 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func getKeepalivedVersion() (*version.Version, error) {
-	cmd := exec.Command("bash", "-c", "keepalived -v")
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	err := cmd.Run()
-	if err != nil {
-		logrus.WithFields(logrus.Fields{"stderr": stderr.String(), "stdout": stdout.String()}).WithError(err).Error("Error getting keepalived version")
-		return nil, errors.New("Error getting keepalived version")
+func getKeepalivedVersion(containerName string) (*version.Version, error) {
+	getVersionCmd := []string{"-v"}
+	var outputCmd *bytes.Buffer
+	if containerName != "" {
+		var err error
+		outputCmd, err = dockerExecCmd(append([]string{"keepalived"}, getVersionCmd...), containerName)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		cmd := exec.Command("keepalived", getVersionCmd...)
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+		err := cmd.Run()
+		if err != nil {
+			logrus.WithFields(logrus.Fields{"stderr": stderr.String(), "stdout": stdout.String()}).WithError(err).Error("Error getting keepalived version")
+			return nil, errors.New("Error getting keepalived version")
+		}
+		outputCmd = &stderr
 	}
 
 	// version is always at first line
-	firstLine, err := stderr.ReadString('\n')
+	firstLine, err := outputCmd.ReadString('\n')
 	if err != nil {
-		logrus.WithField("output", stderr.String()).WithError(err).Error("Failed to parse keepalived version output")
+		logrus.WithField("output", outputCmd.String()).WithError(err).Error("Failed to parse keepalived version output")
 		return nil, errors.New("Failed to parse keepalived version output")
 	}
 

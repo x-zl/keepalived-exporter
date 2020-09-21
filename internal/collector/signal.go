@@ -2,10 +2,11 @@ package collector
 
 import (
 	"bytes"
-	"encoding/json"
 	"io/ioutil"
+	"log"
 	"os"
 	"os/exec"
+	"regexp"
 	"strconv"
 	"strings"
 	"syscall"
@@ -17,8 +18,8 @@ import (
 
 var sigNumSupportedVersion = version.Must(version.NewVersion("1.3.8"))
 
-func isSigNumSupport() bool {
-	keepalivedVersion, err := getKeepalivedVersion()
+func isSigNumSupport(containerName string) bool {
+	keepalivedVersion, err := getKeepalivedVersion(containerName)
 	if err != nil {
 		// keep backward compatibility and assuming it's the latest one on version detection failure
 		return true
@@ -26,38 +27,56 @@ func isSigNumSupport() bool {
 	return keepalivedVersion.GreaterThanOrEqual(sigNumSupportedVersion)
 }
 
-func sigNum(sig string) os.Signal {
-	if !isSigNumSupport() {
+func sigNum(sig, containerName string) int {
+	if !isSigNumSupport(containerName) {
 		switch sig {
 		case "DATA":
-			return syscall.SIGUSR1
+			return 10
 		case "STATS":
-			return syscall.SIGUSR2
+			return 12
 		default:
 			logrus.WithField("signal", sig).Fatal("Unsupported signal for your keepalived")
 		}
 	}
 
-	sigNumCommand := "keepalived --signum=" + sig
-	cmd := exec.Command("bash", "-c", sigNumCommand)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	err := cmd.Run()
-	if err != nil {
-		logrus.WithFields(logrus.Fields{"signal": sig, "stderr": stderr.String()}).WithError(err).Fatal("Error getting signum")
+	sigNumCmd := []string{"--signum", sig}
+	var outputCmd *bytes.Buffer
+	var err error
+
+	if containerName != "" {
+		outputCmd, err = dockerExecCmd(append([]string{"keepalived"}, sigNumCmd...), containerName)
+		if err != nil {
+			logrus.WithFields(logrus.Fields{"signal": sig, "container": containerName}).WithError(err).Fatal("Error getting signum")
+		}
+	} else {
+		cmd := exec.Command("keepalived", sigNumCmd...)
+		var stderr bytes.Buffer
+		cmd.Stdout = outputCmd
+		cmd.Stderr = &stderr
+		err := cmd.Run()
+		if err != nil {
+			logrus.WithFields(logrus.Fields{"signal": sig, "stderr": stderr.String()}).WithError(err).Fatal("Error getting signum")
+		}
 	}
 
-	var signum int
-	err = json.Unmarshal(stdout.Bytes(), &signum)
+	reg, err := regexp.Compile("[^0-9]+")
 	if err != nil {
-		logrus.WithFields(logrus.Fields{"signal": sig, "signum": stdout.String()}).WithError(err).Fatal("Error unmarshalling signum result")
+		log.Panic(err)
+	}
+	strSigNum := reg.ReplaceAllString(outputCmd.String(), "")
+	signum, err := strconv.Atoi(strSigNum)
+	if err != nil {
+		logrus.WithFields(logrus.Fields{"signal": sig, "signum": outputCmd}).WithError(err).Fatal("Error unmarshalling signum result")
 	}
 
-	return syscall.Signal(signum)
+	return signum
 }
 
-func (k *KeepalivedCollector) signal(signal os.Signal) error {
+func (k *KeepalivedCollector) signal(signal int) error {
+	if k.containerName != "" {
+		return dockerKillContainer(k.containerName, strconv.Itoa((signal)))
+	}
+
 	data, err := ioutil.ReadFile(k.pidPath)
 	if err != nil {
 		logrus.WithField("path", k.pidPath).WithError(err).Error("Can't find keepalived")
@@ -76,7 +95,7 @@ func (k *KeepalivedCollector) signal(signal os.Signal) error {
 		return err
 	}
 
-	err = proc.Signal(signal)
+	err = proc.Signal(syscall.Signal(signal))
 	if err != nil {
 		logrus.WithField("pid", pid).WithError(err).Error("Failed to send signal")
 		return err

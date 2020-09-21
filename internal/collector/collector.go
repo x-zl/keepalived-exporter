@@ -2,7 +2,6 @@ package collector
 
 import (
 	"bytes"
-	"os"
 	"os/exec"
 	"strconv"
 	"sync"
@@ -14,13 +13,14 @@ import (
 // KeepalivedCollector implements prometheus.Collector interface and stores required info to collect data
 type KeepalivedCollector struct {
 	sync.Mutex
-	useJSON    bool
-	pidPath    string
-	scriptPath string
-	SIGDATA    os.Signal
-	SIGJSON    os.Signal
-	SIGSTATS   os.Signal
-	metrics    map[string]*prometheus.Desc
+	useJSON       bool
+	pidPath       string
+	scriptPath    string
+	containerName string
+	SIGDATA       int
+	SIGJSON       int
+	SIGSTATS      int
+	metrics       map[string]*prometheus.Desc
 }
 
 // VRRPStats represents Keepalived stats about VRRP
@@ -72,20 +72,21 @@ type KeepalivedStats struct {
 }
 
 // NewKeepalivedCollector is creating new instance of KeepalivedCollector
-func NewKeepalivedCollector(useJSON bool, pidPath, scriptPath string) *KeepalivedCollector {
+func NewKeepalivedCollector(useJSON bool, pidPath, scriptPath, containerName string) *KeepalivedCollector {
 	kc := &KeepalivedCollector{
-		useJSON:    useJSON,
-		pidPath:    pidPath,
-		scriptPath: scriptPath,
+		useJSON:       useJSON,
+		pidPath:       pidPath,
+		scriptPath:    scriptPath,
+		containerName: containerName,
 	}
 
 	kc.fillMetrics()
 
 	if kc.useJSON {
-		kc.SIGJSON = sigNum("JSON")
+		kc.SIGJSON = sigNum("JSON", kc.containerName)
 	}
-	kc.SIGDATA = sigNum("DATA")
-	kc.SIGSTATS = sigNum("STATS")
+	kc.SIGDATA = sigNum("DATA", kc.containerName)
+	kc.SIGSTATS = sigNum("STATS", kc.containerName)
 
 	return kc
 }

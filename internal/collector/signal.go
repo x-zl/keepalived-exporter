@@ -55,7 +55,7 @@ func (k *KeepalivedCollector) sigNum(sig string) int {
 		queryString := u.Query()
 		queryString.Set("signal", sig)
 		u.RawQuery = queryString.Encode()
-		outputCmd, err = utils.EndpointExec(u.String())
+		outputCmd, err = utils.EndpointExec(&u)
 		if err != nil {
 			logrus.WithField("endpoint", k.endpoint.String()).WithError(err).Fatal("Error getting signum")
 		}
@@ -93,7 +93,7 @@ func (k *KeepalivedCollector) signal(signal int) error {
 		queryString := u.Query()
 		queryString.Set("signal", strconv.Itoa(signal))
 		u.RawQuery = queryString.Encode()
-		_, err := utils.EndpointExec(u.String())
+		_, err := utils.EndpointExec(&u)
 		return err
 	}
 

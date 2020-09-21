@@ -24,7 +24,7 @@ func (k *KeepalivedCollector) getKeepalivedVersion() (*version.Version, error) {
 	} else if k.endpoint != nil {
 		u := *k.endpoint
 		u.Path = path.Join(k.endpoint.Path, "version")
-		outputCmd, err = utils.EndpointExec(u.String())
+		outputCmd, err = utils.EndpointExec(&u)
 		if err != nil {
 			return nil, err
 		}

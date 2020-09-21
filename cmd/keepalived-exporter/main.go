@@ -25,6 +25,7 @@ func main() {
 	keepalivedPID := flag.String("ka.pid-path", "/var/run/keepalived.pid", "A path for Keepalived PID")
 	keepalivedCheckScript := flag.String("cs", "", "Health Check script path to be execute for each VIP")
 	keepalivedContainerName := flag.String("container-name", "", "Keepalived container name")
+	keepalivedEndpoint := flag.String("endpoint", "http://localhost:8080", "Keepalived HTTP endpoint for sending signals")
 	versionFlag := flag.Bool("version", false, "Show the current keepalived exporter version")
 
 	flag.Parse()
@@ -37,7 +38,7 @@ func main() {
 		return
 	}
 
-	keepalivedCollector := collector.NewKeepalivedCollector(*keepalivedJSON, *keepalivedPID, *keepalivedCheckScript, *keepalivedContainerName)
+	keepalivedCollector := collector.NewKeepalivedCollector(*keepalivedJSON, *keepalivedPID, *keepalivedCheckScript, *keepalivedContainerName, *keepalivedEndpoint)
 	prometheus.MustRegister(keepalivedCollector)
 
 	http.Handle(*metricsPath, promhttp.Handler())

@@ -2,6 +2,7 @@ package collector
 
 import (
 	"bytes"
+	"net/url"
 	"os/exec"
 	"strconv"
 	"sync"
@@ -17,6 +18,7 @@ type KeepalivedCollector struct {
 	pidPath       string
 	scriptPath    string
 	containerName string
+	endpoint      *url.URL
 	SIGDATA       int
 	SIGJSON       int
 	SIGSTATS      int
@@ -72,7 +74,7 @@ type KeepalivedStats struct {
 }
 
 // NewKeepalivedCollector is creating new instance of KeepalivedCollector
-func NewKeepalivedCollector(useJSON bool, pidPath, scriptPath, containerName string) *KeepalivedCollector {
+func NewKeepalivedCollector(useJSON bool, pidPath, scriptPath, containerName, endpoint string) *KeepalivedCollector {
 	kc := &KeepalivedCollector{
 		useJSON:       useJSON,
 		pidPath:       pidPath,
@@ -82,11 +84,23 @@ func NewKeepalivedCollector(useJSON bool, pidPath, scriptPath, containerName str
 
 	kc.fillMetrics()
 
-	if kc.useJSON {
-		kc.SIGJSON = sigNum("JSON", kc.containerName)
+	if endpoint != "" && containerName != "" {
+		logrus.WithFields(logrus.Fields{"endpoint": endpoint, "containerName": containerName}).Fatal("Both container-name and endpoint can't be set")
 	}
-	kc.SIGDATA = sigNum("DATA", kc.containerName)
-	kc.SIGSTATS = sigNum("STATS", kc.containerName)
+
+	if endpoint != "" {
+		var err error
+		kc.endpoint, err = url.Parse(endpoint)
+		if err != nil {
+			logrus.WithError(err).WithField("endpoint", endpoint).Fatal("Invalid endpoint")
+		}
+	}
+
+	if kc.useJSON {
+		kc.SIGJSON = kc.sigNum("JSON")
+	}
+	kc.SIGDATA = kc.sigNum("DATA")
+	kc.SIGSTATS = kc.sigNum("STATS")
 
 	return kc
 }

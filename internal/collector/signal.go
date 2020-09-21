@@ -3,23 +3,24 @@ package collector
 import (
 	"bytes"
 	"io/ioutil"
-	"log"
 	"os"
 	"os/exec"
+	"path"
 	"regexp"
 	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
+	"github.com/cafebazaar/keepalived-exporter/internal/utils"
 	"github.com/hashicorp/go-version"
 	"github.com/sirupsen/logrus"
 )
 
 var sigNumSupportedVersion = version.Must(version.NewVersion("1.3.8"))
 
-func isSigNumSupport(containerName string) bool {
-	keepalivedVersion, err := getKeepalivedVersion(containerName)
+func (k *KeepalivedCollector) isSigNumSupport() bool {
+	keepalivedVersion, err := k.getKeepalivedVersion()
 	if err != nil {
 		// keep backward compatibility and assuming it's the latest one on version detection failure
 		return true
@@ -27,8 +28,8 @@ func isSigNumSupport(containerName string) bool {
 	return keepalivedVersion.GreaterThanOrEqual(sigNumSupportedVersion)
 }
 
-func sigNum(sig, containerName string) int {
-	if !isSigNumSupport(containerName) {
+func (k *KeepalivedCollector) sigNum(sig string) int {
+	if !k.isSigNumSupport() {
 		switch sig {
 		case "DATA":
 			return 10
@@ -43,10 +44,20 @@ func sigNum(sig, containerName string) int {
 	var outputCmd *bytes.Buffer
 	var err error
 
-	if containerName != "" {
-		outputCmd, err = dockerExecCmd(append([]string{"keepalived"}, sigNumCmd...), containerName)
+	if k.containerName != "" {
+		outputCmd, err = utils.DockerExecCmd(append([]string{"keepalived"}, sigNumCmd...), k.containerName)
 		if err != nil {
-			logrus.WithFields(logrus.Fields{"signal": sig, "container": containerName}).WithError(err).Fatal("Error getting signum")
+			logrus.WithFields(logrus.Fields{"signal": sig, "container": k.containerName}).WithError(err).Fatal("Error getting signum")
+		}
+	} else if k.endpoint != nil {
+		u := *k.endpoint
+		u.Path = path.Join(u.Path, "signal/num")
+		queryString := u.Query()
+		queryString.Set("signal", sig)
+		u.RawQuery = queryString.Encode()
+		outputCmd, err = utils.EndpointExec(u.String())
+		if err != nil {
+			logrus.WithField("endpoint", k.endpoint.String()).WithError(err).Fatal("Error getting signum")
 		}
 	} else {
 		cmd := exec.Command("keepalived", sigNumCmd...)
@@ -61,8 +72,9 @@ func sigNum(sig, containerName string) int {
 
 	reg, err := regexp.Compile("[^0-9]+")
 	if err != nil {
-		log.Panic(err)
+		logrus.WithError(err).Fatal("Unexcpected error occures in creating regex")
 	}
+
 	strSigNum := reg.ReplaceAllString(outputCmd.String(), "")
 	signum, err := strconv.Atoi(strSigNum)
 	if err != nil {
@@ -74,7 +86,15 @@ func sigNum(sig, containerName string) int {
 
 func (k *KeepalivedCollector) signal(signal int) error {
 	if k.containerName != "" {
-		return dockerKillContainer(k.containerName, strconv.Itoa((signal)))
+		return utils.DockerKillContainer(k.containerName, strconv.Itoa((signal)))
+	} else if k.endpoint != nil {
+		u := *k.endpoint
+		u.Path = path.Join(u.Path, "signal")
+		queryString := u.Query()
+		queryString.Set("signal", strconv.Itoa(signal))
+		u.RawQuery = queryString.Encode()
+		_, err := utils.EndpointExec(u.String())
+		return err
 	}
 
 	data, err := ioutil.ReadFile(k.pidPath)

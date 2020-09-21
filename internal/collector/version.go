@@ -4,18 +4,27 @@ import (
 	"bytes"
 	"errors"
 	"os/exec"
+	"path"
 	"strings"
 
+	"github.com/cafebazaar/keepalived-exporter/internal/utils"
 	"github.com/hashicorp/go-version"
 	"github.com/sirupsen/logrus"
 )
 
-func getKeepalivedVersion(containerName string) (*version.Version, error) {
+func (k *KeepalivedCollector) getKeepalivedVersion() (*version.Version, error) {
 	getVersionCmd := []string{"-v"}
 	var outputCmd *bytes.Buffer
-	if containerName != "" {
-		var err error
-		outputCmd, err = dockerExecCmd(append([]string{"keepalived"}, getVersionCmd...), containerName)
+	var err error
+	if k.containerName != "" {
+		outputCmd, err = utils.DockerExecCmd(append([]string{"keepalived"}, getVersionCmd...), k.containerName)
+		if err != nil {
+			return nil, err
+		}
+	} else if k.endpoint != nil {
+		u := *k.endpoint
+		u.Path = path.Join(k.endpoint.Path, "version")
+		outputCmd, err = utils.EndpointExec(u.String())
 		if err != nil {
 			return nil, err
 		}

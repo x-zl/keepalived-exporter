@@ -6,18 +6,11 @@ import (
 	"io/ioutil"
 
 	"github.com/docker/docker/api/types"
-	"github.com/docker/docker/client"
 	"github.com/sirupsen/logrus"
 )
 
-func dockerExecCmd(cmd []string, container string) (*bytes.Buffer, error) {
-	cli, err := client.NewEnvClient()
-	if err != nil {
-		logrus.WithError(err).WithField("CMD", cmd).Error("Error creating docker client")
-		return nil, err
-	}
-
-	rst, err := cli.ContainerExecCreate(context.Background(), container, types.ExecConfig{
+func (k *KeepalivedCollector) dockerExecCmd(cmd []string, container string) (*bytes.Buffer, error) {
+	rst, err := k.dockerCli.ContainerExecCreate(context.Background(), container, types.ExecConfig{
 		AttachStdout: true,
 		AttachStderr: true,
 		Cmd:          cmd,
@@ -27,7 +20,7 @@ func dockerExecCmd(cmd []string, container string) (*bytes.Buffer, error) {
 		return nil, err
 	}
 
-	response, err := cli.ContainerExecAttach(context.Background(), rst.ID, types.ExecConfig{})
+	response, err := k.dockerCli.ContainerExecAttach(context.Background(), rst.ID, types.ExecConfig{})
 	if err != nil {
 		logrus.WithError(err).WithField("CMD", cmd).Error("Error attaching a connection to an exec process")
 		return nil, err
@@ -43,12 +36,6 @@ func dockerExecCmd(cmd []string, container string) (*bytes.Buffer, error) {
 	return bytes.NewBuffer(data), nil
 }
 
-func dockerKillContainer(container, signal string) error {
-	cli, err := client.NewEnvClient()
-	if err != nil {
-		logrus.WithError(err).WithField("signal", signal).Error("Error creating docker client")
-		return err
-	}
-
-	return cli.ContainerKill(context.Background(), container, signal)
+func (k *KeepalivedCollector) dockerKillContainer(container, signal string) error {
+	return k.dockerCli.ContainerKill(context.Background(), container, signal)
 }

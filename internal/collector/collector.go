@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"sync"
 
+	"github.com/docker/docker/client"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
 )
@@ -21,6 +22,7 @@ type KeepalivedCollector struct {
 	SIGJSON       int
 	SIGSTATS      int
 	metrics       map[string]*prometheus.Desc
+	dockerCli     *client.Client
 }
 
 // VRRPStats represents Keepalived stats about VRRP
@@ -80,13 +82,21 @@ func NewKeepalivedCollector(useJSON bool, pidPath, scriptPath, containerName str
 		containerName: containerName,
 	}
 
+	if containerName != "" {
+		var err error
+		kc.dockerCli, err = client.NewEnvClient()
+		if err != nil {
+			logrus.WithError(err).Fatal("Error creating docker client")
+		}
+	}
+
 	kc.fillMetrics()
 
 	if kc.useJSON {
-		kc.SIGJSON = sigNum("JSON", kc.containerName)
+		kc.SIGJSON = kc.sigNum("JSON")
 	}
-	kc.SIGDATA = sigNum("DATA", kc.containerName)
-	kc.SIGSTATS = sigNum("STATS", kc.containerName)
+	kc.SIGDATA = kc.sigNum("DATA")
+	kc.SIGSTATS = kc.sigNum("STATS")
 
 	return kc
 }

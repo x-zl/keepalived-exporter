@@ -18,8 +18,8 @@ import (
 
 var sigNumSupportedVersion = version.Must(version.NewVersion("1.3.8"))
 
-func isSigNumSupport(containerName string) bool {
-	keepalivedVersion, err := getKeepalivedVersion(containerName)
+func (k *KeepalivedCollector) isSigNumSupport() bool {
+	keepalivedVersion, err := k.getKeepalivedVersion()
 	if err != nil {
 		// keep backward compatibility and assuming it's the latest one on version detection failure
 		return true
@@ -27,8 +27,8 @@ func isSigNumSupport(containerName string) bool {
 	return keepalivedVersion.GreaterThanOrEqual(sigNumSupportedVersion)
 }
 
-func sigNum(sig, containerName string) int {
-	if !isSigNumSupport(containerName) {
+func (k *KeepalivedCollector) sigNum(sig string) int {
+	if !k.isSigNumSupport() {
 		switch sig {
 		case "DATA":
 			return 10
@@ -43,10 +43,10 @@ func sigNum(sig, containerName string) int {
 	var outputCmd *bytes.Buffer
 	var err error
 
-	if containerName != "" {
-		outputCmd, err = dockerExecCmd(append([]string{"keepalived"}, sigNumCmd...), containerName)
+	if k.containerName != "" {
+		outputCmd, err = k.dockerExecCmd(append([]string{"keepalived"}, sigNumCmd...), k.containerName)
 		if err != nil {
-			logrus.WithFields(logrus.Fields{"signal": sig, "container": containerName}).WithError(err).Fatal("Error getting signum")
+			logrus.WithFields(logrus.Fields{"signal": sig, "container": k.containerName}).WithError(err).Fatal("Error getting signum")
 		}
 	} else {
 		cmd := exec.Command("keepalived", sigNumCmd...)
@@ -74,7 +74,7 @@ func sigNum(sig, containerName string) int {
 
 func (k *KeepalivedCollector) signal(signal int) error {
 	if k.containerName != "" {
-		return dockerKillContainer(k.containerName, strconv.Itoa((signal)))
+		return k.dockerKillContainer(k.containerName, strconv.Itoa((signal)))
 	}
 
 	data, err := ioutil.ReadFile(k.pidPath)

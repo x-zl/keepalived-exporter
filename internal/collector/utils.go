@@ -10,12 +10,12 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func getKeepalivedVersion(containerName string) (*version.Version, error) {
+func (k *KeepalivedCollector) getKeepalivedVersion() (*version.Version, error) {
 	getVersionCmd := []string{"-v"}
 	var outputCmd *bytes.Buffer
-	if containerName != "" {
+	if k.containerName != "" {
 		var err error
-		outputCmd, err = dockerExecCmd(append([]string{"keepalived"}, getVersionCmd...), containerName)
+		outputCmd, err = k.dockerExecCmd(append([]string{"keepalived"}, getVersionCmd...), k.containerName)
 		if err != nil {
 			return nil, err
 		}
